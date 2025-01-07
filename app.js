@@ -2,10 +2,6 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// Bot configuration
-const BOT_TOKEN = '8191625922:AAHkLEgrqecatmW_k0V0fGaNG8Fq5DwfayU';
-const API_BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
 // Elements
 const fileInput = document.getElementById('fileInput');
 const dropZone = document.querySelector('.border-dashed');
@@ -22,12 +18,11 @@ if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
 
 async function loadUserFiles(userId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/getUserFiles`, {
-            method: 'POST',
+        const response = await fetch(`/api/files?user_id=${userId}`, {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ user_id: userId })
+            }
         });
         
         if (response.ok) {

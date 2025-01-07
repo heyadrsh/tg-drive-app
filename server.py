@@ -5,8 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Check for required environment variables
+if not os.getenv('BOT_TOKEN'):
+    raise ValueError("BOT_TOKEN environment variable is required")
+
 app = Flask(__name__)
-bot = Bot(token=os.getenv('BOT_TOKEN', '8191625922:AAHkLEgrqecatmW_k0V0fGaNG8Fq5DwfayU'))
+bot = Bot(token=os.getenv('BOT_TOKEN'))
 
 @app.route('/')
 def home():

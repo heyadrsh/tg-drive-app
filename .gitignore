@@ -1,6 +1,12 @@
 # Dependencies
 node_modules/
+__pycache__/
+*.pyc
+
+# Environment files
 .env
+.env.*
+*.env
 
 # Build files
 dist/
