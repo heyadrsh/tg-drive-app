@@ -2,6 +2,10 @@
 const tg = window.Telegram.WebApp;
 tg.expand();
 
+// Bot configuration
+const BOT_TOKEN = '8191625922:AAHkLEgrqecatmW_k0V0fGaNG8Fq5DwfayU';
+const API_BASE_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+
 // Elements
 const fileInput = document.getElementById('fileInput');
 const dropZone = document.querySelector('.border-dashed');
@@ -13,7 +17,34 @@ let files = [];
 // Initialize from bot data if available
 if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
     const userId = tg.initDataUnsafe.user.id;
-    // TODO: Fetch user's files from bot
+    loadUserFiles(userId);
+}
+
+async function loadUserFiles(userId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/getUserFiles`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id: userId })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.result) {
+                data.result.forEach(file => {
+                    createFileItem({
+                        name: file.file_name,
+                        size: file.file_size,
+                        id: file.file_id
+                    }, true);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading files:', error);
+    }
 }
 
 // Drag and drop handlers
@@ -53,30 +84,32 @@ async function uploadFile(file) {
     
     try {
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('document', file);
         formData.append('chat_id', tg.initDataUnsafe.user.id);
         
-        const response = await fetch('YOUR_BOT_API_ENDPOINT', {
+        const response = await fetch(`${API_BASE_URL}/sendDocument`, {
             method: 'POST',
-            body: formData,
-            headers: {
-                'Authorization': `Bearer ${tg.initData}`
-            }
+            body: formData
         });
         
-        if (!response.ok) throw new Error('Upload failed');
+        const data = await response.json();
         
+        if (!response.ok) throw new Error(data.description || 'Upload failed');
+        
+        // Store file ID from response
+        fileItem.dataset.fileId = data.result.document.file_id;
         updateFileStatus(fileItem, 'success');
     } catch (error) {
         updateFileStatus(fileItem, 'error', error.message);
     }
 }
 
-function createFileItem(file) {
+function createFileItem(file, isExisting = false) {
     const item = document.createElement('div');
     item.className = 'file-item';
     
-    const size = formatFileSize(file.size);
+    const size = isExisting ? formatFileSize(file.size) : formatFileSize(file.size);
+    const name = isExisting ? file.name : file.name;
     
     item.innerHTML = `
         <div class="file-icon">
@@ -86,19 +119,89 @@ function createFileItem(file) {
             </svg>
         </div>
         <div class="file-info">
-            <div class="file-name">${file.name}</div>
+            <div class="file-name">${name}</div>
             <div class="file-size">${size}</div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: 0%"></div>
+                <div class="progress-fill" style="width: ${isExisting ? '100%' : '0%'}"></div>
             </div>
         </div>
         <div class="file-actions">
+            <button class="btn btn-primary" onclick="downloadFile(this)">Download</button>
             <button class="btn btn-danger" onclick="deleteFile(this)">Delete</button>
         </div>
     `;
     
+    if (isExisting) {
+        item.dataset.fileId = file.id;
+        const progressBar = item.querySelector('.progress-fill');
+        progressBar.style.backgroundColor = '#10b981';
+    }
+    
     fileList.appendChild(item);
     return item;
+}
+
+async function downloadFile(button) {
+    const fileItem = button.closest('.file-item');
+    const fileId = fileItem.dataset.fileId;
+    
+    if (!fileId) {
+        showError('File ID not found');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/getFile`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_id: fileId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) throw new Error(data.description || 'Download failed');
+        
+        // Open file in new tab
+        window.open(`https://api.telegram.org/file/bot${BOT_TOKEN}/${data.result.file_path}`);
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+async function deleteFile(button) {
+    const fileItem = button.closest('.file-item');
+    const fileId = fileItem.dataset.fileId;
+    
+    if (!fileId) {
+        fileItem.remove();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/deleteMessage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chat_id: tg.initDataUnsafe.user.id,
+                message_id: fileId
+            })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.description || 'Delete failed');
+        }
+        
+        fileItem.remove();
+    } catch (error) {
+        showError(error.message);
+    }
 }
 
 function updateFileStatus(fileItem, status, message = '') {
@@ -114,16 +217,6 @@ function updateFileStatus(fileItem, status, message = '') {
     }
 }
 
-function deleteFile(button) {
-    const fileItem = button.closest('.file-item');
-    const index = files.findIndex(f => f.element === fileItem);
-    
-    if (index !== -1) {
-        files.splice(index, 1);
-        fileItem.remove();
-    }
-}
-
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     
@@ -135,7 +228,6 @@ function formatFileSize(bytes) {
 }
 
 function showError(message) {
-    // You can customize this to show errors in a better way
     tg.showAlert(message);
 }
 
